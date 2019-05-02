@@ -12,41 +12,15 @@ RCT_EXPORT_MODULE(AudioRoutesEvents)
     return @[@"AudioRouteChange", @"deviceConnected"];
 }
 
-RCT_EXPORT_METHOD(configureNotifications)
-{
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(audioRouteHaveChanged:)
-                                                 name:AVAudioSessionRouteChangeNotification
-                                               object:nil];
-}
-
 - (void)audioRouteHaveChanged:(NSNotification *)notification
 {
-    NSNumber *routeChangeType = [notification.userInfo objectForKey:@"AVAudioSessionRouteChangeReasonKey"];
-    NSUInteger routeChangeTypeValue = [routeChangeType unsignedIntegerValue];
-
-    switch (routeChangeTypeValue) {
-        case AVAudioSessionRouteChangeReasonUnknown:
-            break;
-        case AVAudioSessionRouteChangeReasonNewDeviceAvailable:
-            if ([self checkAudioRoute:@[AVAudioSessionPortHeadsetMic] routeType:@"output"]) {
-                [self sendEventWithName:@"AudioRouteChange" body:@{@"type": @"NewDeviceAvailableWiredHeadset"}];
-            } else if ([self checkAudioRoute:@[AVAudioSessionPortBluetoothHFP] routeType:@"output"]) {
-                [self sendEventWithName:@"AudioRouteChange" body:@{@"type": @"NewDeviceAvailableBluetooth"}];
-            }
-            break;
-        case AVAudioSessionRouteChangeReasonOldDeviceUnavailable:
-            [self sendEventWithName:@"AudioRouteChange" body: @{@"type": @"OldDeviceUnavailable"}];
-            break;
-        default:
-            break;
-    }
+    [self sendEventWithName:@"AudioRouteChange" body: @{@"type": @"AVAudioSessionRouteChangeNotification"}];
 }
 
 RCT_EXPORT_METHOD(currentRoute:(RCTResponseSenderBlock)callback)
 {
     AVAudioSessionRouteDescription *currentRoute = [AVAudioSession sharedInstance].currentRoute;
-
+    
     NSString *currentRouteString = @"Unknown";
     if (currentRoute != nil) {
         NSArray<AVAudioSessionPortDescription *> *routes = currentRoute.outputs;
@@ -65,7 +39,7 @@ RCT_EXPORT_METHOD(currentRoute:(RCTResponseSenderBlock)callback)
             }
         }
     }
-
+    
     callback(@[[NSNull null], currentRouteString]);
 }
 
@@ -73,17 +47,20 @@ RCT_EXPORT_METHOD(currentRoute:(RCTResponseSenderBlock)callback)
 
 RCT_EXPORT_METHOD(initialize)
 {
-
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(audioRouteHaveChanged:)
+                                                 name:AVAudioSessionRouteChangeNotification
+                                               object:nil];
+    
     // Add observer which will call "deviceChanged" method when audio outpout changes
     // e.g. headphones connect / disconnect
     if (@available(iOS 11.0, *)) {
         routeDetector = [[AVRouteDetector alloc] init];
-        [[NSNotificationCenter defaultCenter]
-         addObserver:self
-         selector: @selector(routeDetector:)
-         name:AVRouteDetectorMultipleRoutesDetectedDidChangeNotification
-         object:routeDetector];
-
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(routeDetector:)
+                                                     name:AVRouteDetectorMultipleRoutesDetectedDidChangeNotification
+                                                   object:routeDetector];
+        
         // Also call sendEventAboutConnectedDevice method immediately to send currently connected device
         // at the time of startScan
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -104,13 +81,13 @@ RCT_EXPORT_METHOD(disconnect)
     [self sendEventAboutConnectedDevice];
 }
 
-- (void) sendEventAboutConnectedDevice;
+- (void)sendEventAboutConnectedDevice
 {
     if (@available(iOS 11.0, *)) {
         routeDetector.routeDetectionEnabled = YES;
         BOOL routeDetectionEnabled = routeDetector.routeDetectionEnabled;
         BOOL multipleRoutesDetected = routeDetector.multipleRoutesDetected;
-
+        
         [self sendEventWithName:@"deviceConnected" body:@{@"routeDetectionEnabled": @(routeDetectionEnabled), @"multipleRoutesDetected": @(multipleRoutesDetected)}];
     } else {
         // Fallback on earlier versions
@@ -121,7 +98,7 @@ RCT_EXPORT_METHOD(disconnect)
               routeType:(NSString *)routeType
 {
     AVAudioSessionRouteDescription *currentRoute = [AVAudioSession sharedInstance].currentRoute;
-
+    
     if (currentRoute != nil) {
         NSArray<AVAudioSessionPortDescription *> *routes = [routeType isEqualToString:@"input"]
         ? currentRoute.inputs
@@ -136,3 +113,4 @@ RCT_EXPORT_METHOD(disconnect)
 }
 
 @end
+
